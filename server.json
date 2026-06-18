@@ -1,0 +1,58 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.wyre-technology/inforcer-mcp",
+  "title": "Inforcer",
+  "description": "Read-only MCP server for Inforcer M365 baseline governance, plus assessment runs.",
+  "repository": {
+    "url": "https://github.com/wyre-technology/inforcer-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "websiteUrl": "https://github.com/wyre-technology/inforcer-mcp",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/wyre-technology/inforcer-mcp:0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "INFORCER_REGION",
+          "description": "Inforcer API region. One of: anz, eu, uk, us. Required.",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "INFORCER_API_KEY",
+          "description": "Inforcer API key (sent as the Inf-Api-Key header). Required.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MCP_TRANSPORT",
+          "description": "Transport mode for the server. Set to 'stdio' for local CLI use; the image defaults to 'http' for gateway hosting.",
+          "isRequired": false,
+          "default": "stdio",
+          "format": "string"
+        },
+        {
+          "name": "AUTH_MODE",
+          "description": "Credential source: 'env' reads vars locally, 'gateway' expects header injection from the WYRE MCP Gateway.",
+          "isRequired": false,
+          "default": "env",
+          "format": "string"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "description": "Log verbosity: debug, info, warn, error",
+          "isRequired": false,
+          "default": "info",
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
