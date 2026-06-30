@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
-import { getCredentials, resetClient } from './utils/client.js';
+import { getCredentials, runWithCredentials } from './utils/client.js';
 import { logger } from './utils/logger.js';
 
 function startHttpServer(): void {
@@ -14,8 +14,7 @@ function startHttpServer(): void {
 
     if (url.pathname === '/health') {
       const creds = getCredentials();
-      const statusCode = creds ? 200 : 503;
-      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      res.writeHead(creds ? 200 : 503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: creds ? 'ok' : 'degraded',
         transport: 'http',
@@ -31,33 +30,33 @@ function startHttpServer(): void {
       return;
     }
 
-    if (isGatewayMode) {
-      const region = req.headers['x-inforcer-region'] as string;
-      const apiKey = req.headers['x-inforcer-api-key'] as string;
-      if (region && apiKey) {
-        process.env.INFORCER_REGION = region;
-        process.env.INFORCER_API_KEY = apiKey;
-        // Credentials may differ per request — drop the cached client so the
-        // next getClient() rebuilds with the freshly-injected credentials.
-        resetClient();
-      }
-      // Don't reject — tools/list works without credentials
+    const region = isGatewayMode ? (req.headers['x-inforcer-region'] as string | undefined) : undefined;
+    const apiKey = isGatewayMode ? (req.headers['x-inforcer-api-key'] as string | undefined) : undefined;
+
+    const handle = async () => {
+      const server = createServer();
+      // SECURITY-CRITICAL invariant: this transport MUST stay stateless
+      // (sessionIdGenerator: undefined + enableJsonResponse: true). Per-request
+      // tenant credentials are carried in an AsyncLocalStorage context opened by
+      // runWithCredentials() below. A stateless request->single-response flow
+      // keeps the tool call inside that context. Switching to a stateful/SSE
+      // transport (sessionIdGenerator set, persistent stream) would let a
+      // long-lived connection serve later messages under a stale/foreign
+      // credential context — re-review tenant isolation before changing this.
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+      res.on('close', () => { transport.close(); server.close(); });
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+    };
+
+    if (region && apiKey) {
+      await runWithCredentials({ region, apiKey }, handle);
+    } else {
+      await handle();
     }
-
-    // Create fresh server + transport per request (stateless)
-    const server = createServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
-
-    res.on('close', () => {
-      transport.close();
-      server.close();
-    });
-
-    await server.connect(transport);
-    await transport.handleRequest(req, res);
   });
 
   httpServer.listen(port, host, () => {
